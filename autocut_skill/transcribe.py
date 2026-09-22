@@ -76,17 +76,7 @@ def transcribe_video(video_path, output_dir=None, model="small"):
     srt_path = os.path.join(out_dir, f"{base_name}.srt")
     md_path = os.path.join(out_dir, f"{base_name}.md")
 
-    # Priority 1: Check if autocut CLI is installed
-    autocut_bin = shutil.which("autocut")
-    if autocut_bin:
-        print(f"[*] Found system autocut at: {autocut_bin}. Running transcription...")
-        cmd = [autocut_bin, "-t", "-m", video_path]
-        proc = subprocess.run(cmd, cwd=out_dir)
-        if proc.returncode == 0 and os.path.exists(md_path):
-            print(f"[+] Successfully transcribed with system autocut.")
-            return srt_path, md_path
-
-    # Priority 2: Check if whisper CLI is installed
+    # Priority 1: Check if whisper CLI is installed (standard native Whisper)
     whisper_bin = shutil.which("whisper")
     if whisper_bin:
         print(f"[*] Found system whisper at: {whisper_bin}. Running transcription...")
@@ -102,7 +92,7 @@ def transcribe_video(video_path, output_dir=None, model="small"):
             srt_to_markdown(srt_path, md_path)
             return srt_path, md_path
 
-    # Priority 3: Try Python whisper library
+    # Priority 2: Try Python openai-whisper / faster-whisper library
     try:
         import whisper
         print(f"[*] Loading Python whisper model: {model}...")
@@ -140,9 +130,16 @@ def transcribe_video(video_path, output_dir=None, model="small"):
     except ImportError:
         pass
 
+    # Priority 3: Fallback to existing system transcriber if present
+    autocut_bin = shutil.which("autocut")
+    if autocut_bin:
+        cmd = [autocut_bin, "-t", "-m", video_path]
+        proc = subprocess.run(cmd, cwd=out_dir)
+        if proc.returncode == 0 and os.path.exists(md_path):
+            return srt_path, md_path
+
     raise RuntimeError(
-        "No transcription engine found. Please install either:\n"
-        "  1. autocut (pipx install autocut-sub)\n"
-        "  2. openai-whisper (pip install openai-whisper)\n"
-        "  3. faster-whisper"
+        "No Whisper transcription engine found. Please install whisper:\n"
+        "  pip install openai-whisper\n"
+        "  (Note: autocut-skill is fully independent and does NOT require legacy autocut!)"
     )
