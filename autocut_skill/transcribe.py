@@ -126,6 +126,8 @@ def transcribe_video(video_path, output_dir=None, model="small"):
 
         srt_to_markdown(srt_path, md_path)
         return srt_path, md_path
+    except ImportError:
+        pass
 
     # Priority 3: Try Python faster-whisper library if installed
     try:
