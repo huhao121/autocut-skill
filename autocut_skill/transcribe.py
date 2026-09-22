@@ -2,7 +2,7 @@
 """
 autocut-skill: Transcribe Engine
 Transcribes speech in videos into millisecond-accurate SRT and Markdown checklists.
-Supports system autocut CLI, whisper CLI, or openai-whisper library.
+Driven 100% by native Whisper (CLI, openai-whisper, or faster-whisper).
 """
 
 import os
@@ -63,8 +63,8 @@ def srt_to_markdown(srt_path, md_path, auto_uncheck_silence=True):
 
 def transcribe_video(video_path, output_dir=None, model="small"):
     """
-    Transcribe a video to .srt and .md.
-    Prefers installed autocut / whisper CLI, falls back to Python library.
+    Transcribe a video to .srt and .md checklist using native Whisper.
+    Supports system whisper CLI, openai-whisper, or faster-whisper.
     """
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video file not found: {video_path}")
@@ -127,19 +127,47 @@ def transcribe_video(video_path, output_dir=None, model="small"):
         srt_to_markdown(srt_path, md_path)
         return srt_path, md_path
 
+    # Priority 3: Try Python faster-whisper library if installed
+    try:
+        from faster_whisper import WhisperModel
+        print(f"[*] Loading faster-whisper model: {model}...")
+        fw_model = WhisperModel(model, device="auto", compute_type="auto")
+        segments_gen, _ = fw_model.transcribe(video_path)
+
+        lines = []
+        for i, seg in enumerate(segments_gen, 1):
+            st = seg.start
+            et = seg.end
+            text = seg.text.strip()
+
+            sh = int(st // 3600)
+            sm = int((st % 3600) // 60)
+            ss = int(st % 60)
+            sms = int((st - int(st)) * 1000)
+
+            eh = int(et // 3600)
+            em = int((et % 3600) // 60)
+            es = int(et % 60)
+            ems = int((et - int(et)) * 1000)
+
+            lines.append(f"{i}")
+            lines.append(f"{sh:02d}:{sm:02d}:{ss:02d},{sms:03d} --> {eh:02d}:{em:02d}:{es:02d},{ems:03d}")
+            lines.append(text)
+            lines.append("")
+
+        with open(srt_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
+        srt_to_markdown(srt_path, md_path)
+        return srt_path, md_path
+
     except ImportError:
         pass
 
-    # Priority 3: Fallback to existing system transcriber if present
-    autocut_bin = shutil.which("autocut")
-    if autocut_bin:
-        cmd = [autocut_bin, "-t", "-m", video_path]
-        proc = subprocess.run(cmd, cwd=out_dir)
-        if proc.returncode == 0 and os.path.exists(md_path):
-            return srt_path, md_path
-
     raise RuntimeError(
-        "No Whisper transcription engine found. Please install whisper:\n"
+        "No Whisper transcription engine found.\n"
+        "Please install Whisper to enable auto transcription:\n"
         "  pip install openai-whisper\n"
-        "  (Note: autocut-skill is fully independent and does NOT require legacy autocut!)"
+        "  (or: pip install faster-whisper)\n"
+        "Note: video cutting (autocut-skill cut) does not require Whisper, only FFmpeg!"
     )

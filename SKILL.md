@@ -18,7 +18,11 @@ Edit video by writing Markdown. Built for creators and autonomous AI agents.
 1. **Zero-Drift Sync**: Replaces legacy MoviePy with native FFmpeg single-graph FilterGraph. Audio and video PTS clocks are locked at the decoder level. 0.00ms drift across 100+ cuts.
 2. **Breathing Buffers**: Automatic `0.18s` pre-roll (lips opening / initial consonants) and `0.15s` post-roll (trailing vowels). No chopped consonants (e.g. preserves "Jev" instead of clipping to "ev").
 3. **Hardware Compensation**: Supports `--advance <seconds>` to offset Bluetooth/wireless microphone latency.
-4. **Apple Silicon Acceleration**: Automatic `h264_videotoolbox` hardware encoding with 48,000Hz hi-fi audio.
+## Prerequisites & Dependencies
+
+- **Video Cutting (`autocut-skill cut`)**: Only system **`ffmpeg`** is required. Zero heavy Python video dependencies.
+- **Audio Transcription (`autocut-skill transcribe`)**: Requires standard **`whisper`** (`pip install openai-whisper` or `brew install openai-whisper` or `faster-whisper`).
+- **100% Independent**: This skill is self-contained. It does **NOT** require or use legacy `autocut` or `moviepy`.
 
 ## Commands
 
