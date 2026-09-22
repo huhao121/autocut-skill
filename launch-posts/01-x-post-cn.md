@@ -32,7 +32,7 @@
 ```text
 GitHub 仓库已开源：https://github.com/huhao121/autocut-skill
 
-（致敬原作者李沐老师 @mli 开源 AutoCut 的优雅设计，代码纯净、零多余依赖，只要装了 ffmpeg 就能跑）
+（致敬原作者李沐老师开源 AutoCut 的优雅设计，代码纯净、零多余依赖，只要装了 ffmpeg 就能跑）
 
 欢迎 Star 收藏或交流音视频 FilterGraph 极客玩法！
 ```

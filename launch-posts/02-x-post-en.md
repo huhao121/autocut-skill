@@ -32,6 +32,6 @@ Just open-sourced it on GitHub.
 ```text
 GitHub repository: https://github.com/huhao121/autocut-skill
 
-Huge respect to Mu Li (@mli) for the original Markdown-editing concept.
+Huge respect to Mu Li for the original Markdown-editing concept.
 Pure Python + FFmpeg, zero bloat. Stars and PRs welcome!
 ```

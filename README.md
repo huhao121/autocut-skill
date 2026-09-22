@@ -134,6 +134,6 @@ The agent will read the Markdown file, audit the transcript, uncheck bloopers, a
 
 ## 📜 Acknowledgements & License
 
-- **Original Inspiration**: Huge thanks to **Mu Li ([@mli](https://github.com/mli))** and the contributors of [mli/autocut](https://github.com/mli/autocut) for the visionary concept of editing video via text.
+- **Original Inspiration**: Huge thanks to **Mu Li** and the contributors of [mli/autocut](https://github.com/mli/autocut) for the visionary concept of editing video via text.
 - **Whisper**: Speech recognition powered by OpenAI's Whisper model.
 - **License**: MIT License. See [LICENSE](LICENSE) for details.
