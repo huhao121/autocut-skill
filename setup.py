@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="autocut-skill",
-    version="0.1.0",
+    version="0.2.0",
     author="huhao121",
     description="A zero-drift, Markdown-driven video cut engine & Agent skill. Built on top of AutoCut's philosophy, rewritten with native FFmpeg FilterGraph.",
     long_description=open("README.md", encoding="utf-8").read(),

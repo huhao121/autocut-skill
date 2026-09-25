@@ -27,6 +27,7 @@ def main():
         epilog="Examples:\n"
                "  autocut-skill transcribe raw.mp4\n"
                "  autocut-skill cut raw.mp4 --md raw.md --out cut.mp4\n"
+               "  autocut-skill cut raw.mp4 --advance 0.56 --burn-subtitles raw.srt\n"
                "  autocut-skill cut raw.mp4  (auto-detects raw.srt and raw.md)\n"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
@@ -46,14 +47,21 @@ def main():
     p_cut.add_argument("--pre-roll", type=float, default=0.18, help="Pre-speech buffer in seconds (default: 0.18s)")
     p_cut.add_argument("--post-roll", type=float, default=0.15, help="Post-speech buffer in seconds (default: 0.15s)")
     p_cut.add_argument("--merge-gap", type=float, default=0.35, help="Merge sentences closer than this (default: 0.35s)")
-    p_cut.add_argument("--advance", type=float, default=0.0, help="Audio advance hardware compensation in seconds")
+    p_cut.add_argument("--advance", "--audio-advance", dest="advance", type=float, default=0.0,
+                       help="Audio advance hardware compensation in seconds (offsets lips movement to match mic latency)")
     p_cut.add_argument("--bitrate", default="5500k", help="Output video bitrate (default: 5500k)")
+    p_cut.add_argument("--burn-subtitles", default=None, help="Path to SRT subtitle file to hard burn into the video")
+    p_cut.add_argument("--subtitle-style", default=None, help="Custom ASS style for burned subtitles")
+    p_cut.add_argument("--blur-box", action="append", default=[], dest="blur_boxes",
+                       help="Privacy blur box in format 'start:end:x:y:w:h' (can be specified multiple times)")
 
     # Command: auto (transcribe + cut non-speech)
     p_auto = subparsers.add_parser("auto", help="One-shot: transcribe and automatically cut silent pauses")
     p_auto.add_argument("video", help="Path to input video file")
     p_auto.add_argument("--model", default="small", help="Whisper model")
     p_auto.add_argument("--out", default=None, help="Output video path")
+    p_auto.add_argument("--advance", type=float, default=0.0, help="Audio advance hardware compensation in seconds")
+    p_auto.add_argument("--burn-subtitles", action="store_true", help="Burn generated subtitles into video")
 
     args = parser.parse_args()
 
@@ -83,6 +91,9 @@ def main():
             merge_gap=args.merge_gap,
             audio_advance=args.advance,
             bitrate=args.bitrate,
+            burn_subtitles=args.burn_subtitles,
+            subtitle_style=args.subtitle_style,
+            blur_boxes=args.blur_boxes,
         )
         if not success:
             sys.exit(1)
@@ -95,12 +106,16 @@ def main():
         base_name = os.path.splitext(os.path.basename(args.video))[0]
         out_path = args.out or os.path.join(video_dir, f"{base_name}_cut.mp4")
 
+        sub_burn = srt_path if args.burn_subtitles else None
+
         print("[*] Step 2: Cutting video based on speech segments...")
         success = cut_video(
             raw_video=args.video,
             srt_file=srt_path,
             md_file=md_path,
             output_file=out_path,
+            audio_advance=args.advance,
+            burn_subtitles=sub_burn,
         )
         if not success:
             sys.exit(1)

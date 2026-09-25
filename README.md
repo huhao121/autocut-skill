@@ -58,6 +58,8 @@ The original [mli/autocut](https://github.com/mli/autocut) (7.8k stars) by Mu Li
 | **Cumulative Drift (50+ cuts)** | ❌ **500ms ~ 1500ms** (Noticeable lip lag) | ✅ **0.00ms (Frame-accurate synchronization)** |
 | **Speech Breathing Buffer** | ❌ None (Hard cut, chops initial consonants) | ✅ **0.18s Pre-roll (inhale/lip open) + 0.15s Post-roll (trailing vowel)** |
 | **Hardware Delay Correction** | ❌ Unsupported | ✅ `--advance <seconds>` (Fixes wireless mic/Bluetooth latency) |
+| **Subtitle Hard-Burning** | ❌ Unsupported | ✅ `--burn-subtitles <srt>` (Anti-obscuring avatar margin styling) |
+| **Privacy Area Blurring** | ❌ Unsupported | ✅ `--blur-box "st:et:x:y:w:h"` (Redacts API keys/tokens) |
 | **Export Speed** | ❌ Slow CPU rendering | ✅ **Apple Silicon VideoToolbox hardware acceleration** (8x faster) |
 | **Audio Quality** | Resampled 44.1kHz | **48,000Hz Hi-Fi pristine audio** |
 
@@ -103,6 +105,9 @@ autocut-skill transcribe raw_footage.mp4
 # Step 3: Cut the video
 autocut-skill cut raw_footage.mp4
 # -> Outputs raw_footage_cut.mp4 with zero drift!
+
+# Advanced: Compensate mic latency & burn subtitles with webcam avatar avoidance
+autocut-skill cut raw_footage.mp4 --advance 0.56 --burn-subtitles raw_footage.srt
 ```
 
 ### 3. One-Shot Auto Cut

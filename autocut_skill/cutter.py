@@ -2,7 +2,8 @@
 """
 autocut-skill: Cutter Engine
 A zero-drift, native FFmpeg FilterGraph video cutter driven by Markdown checklists.
-Eliminates MoviePy cumulative A/V sync drift and audio clipping.
+Eliminates MoviePy cumulative A/V sync drift, audio clipping, and provides hardware acceleration,
+latency compensation, and subtitle burning with camera avatar avoidance.
 """
 
 import argparse
@@ -51,7 +52,7 @@ def parse_md(md_path):
 def build_segments(subs, kept_indices, pre_roll=0.18, post_roll=0.15, merge_gap=0.35):
     """
     Build cut segments with human speech breathing buffers.
-    Pre-roll ensures lips opening and consonants are preserved.
+    Pre-roll ensures lips opening and consonants are preserved (e.g. preserves "Jev" instead of "ev").
     Post-roll ensures trailing vowels are not abruptly cut off.
     """
     raw_segments = []
@@ -115,10 +116,28 @@ def cut_video(
     merge_gap=0.35,
     audio_advance=0.0,
     bitrate="5500k",
+    burn_subtitles=None,
+    subtitle_style=None,
+    blur_boxes=None,
 ):
     """
     Cut video based on Markdown checklist using single-pass native FFmpeg FilterGraph.
     Clocks are strictly synchronized at the decoder level.
+
+    Args:
+        raw_video: Path to raw video file.
+        srt_file: Path to transcript SRT subtitle file.
+        md_file: Path to edited Markdown checklist file.
+        output_file: Destination path for finished cut video.
+        pre_roll: Speech start breathing buffer in seconds.
+        post_roll: Speech end breathing buffer in seconds.
+        merge_gap: Maximum gap to merge adjacent sentences in seconds.
+        audio_advance: Audio advance / latency compensation in seconds (e.g. 0.56s).
+                       Offsets video backwards so lips movement matches delayed mic audio.
+        bitrate: Target video bitrate (e.g. "5500k").
+        burn_subtitles: Optional path to SRT file to hard burn into the video.
+        subtitle_style: Optional ASS/FFmpeg force_style string for subtitles.
+        blur_boxes: Optional list of blur box strings in format "start:end:x:y:w:h".
     """
     if not os.path.exists(raw_video):
         raise FileNotFoundError(f"Video file not found: {raw_video}")
@@ -147,34 +166,70 @@ def cut_video(
         ratio = (1 - est_dur / orig_dur) * 100
         print(f"[*] Estimated compression ratio: -{ratio:.1f}% duration")
 
+    # Parse blur boxes if provided: (start, end, x, y, w, h)
+    parsed_blurs = []
+    if blur_boxes:
+        for b in blur_boxes:
+            try:
+                parts = b.split(":")
+                if len(parts) == 6:
+                    bst, bet, bx, by, bw, bh = parts
+                    parsed_blurs.append((float(bst), float(bet), int(bx), int(by), int(bw), int(bh)))
+            except Exception:
+                pass
+
     # Build native FFmpeg single-graph FilterGraph
     filter_parts = []
-    v_out_tags = []
-    a_out_tags = []
+    concat_inputs = []
 
     for i, seg in enumerate(segments):
-        st = seg["start"]
-        et = seg["end"]
+        # Audio range: keep 100% full natural speech range
+        ast = seg["start"]
+        aet = seg["end"]
+        dur = aet - ast
 
-        # Video stream segment
-        v_tag = f"v{i}"
-        filter_parts.append(
-            f"[0:v]trim=start={st:.3f}:end={et:.3f},setpts=PTS-STARTPTS[{v_tag}]"
+        # Video range: compensate for microphone latency
+        # When mic audio lags by audio_advance, lips movement happens earlier:
+        vst = max(0.0, ast - audio_advance)
+        vet = vst + dur
+
+        # Check if segment overlaps with privacy blur boxes
+        cur_blurs = [b for b in parsed_blurs if not (aet < b[0] or ast > b[1])]
+        if cur_blurs:
+            filter_parts.append(f"[0:v]trim=start={vst:.3f}:end={vet:.3f},setpts=PTS-STARTPTS[v_raw{i}]")
+            cur_v = f"v_raw{i}"
+            for bi, (_, _, bx, by, bw, bh) in enumerate(cur_blurs):
+                next_v = f"v_b{i}_{bi}"
+                filter_parts.append(
+                    f"[{cur_v}]split[{cur_v}_base][{cur_v}_crop];"
+                    f"[{cur_v}_crop]crop={bw}:{bh}:{bx}:{by},boxblur=15:15[{cur_v}_blur];"
+                    f"[{cur_v}_base][{cur_v}_blur]overlay={bx}:{by}[{next_v}]"
+                )
+                cur_v = next_v
+            filter_parts.append(f"[{cur_v}]null[v{i}]")
+        else:
+            filter_parts.append(f"[0:v]trim=start={vst:.3f}:end={vet:.3f},setpts=PTS-STARTPTS[v{i}]")
+
+        filter_parts.append(f"[0:a]atrim=start={ast:.3f}:end={aet:.3f},asetpts=PTS-STARTPTS[a{i}]")
+        concat_inputs.append(f"[v{i}][a{i}]")
+
+    n = len(segments)
+    if burn_subtitles and os.path.exists(burn_subtitles):
+        sub_path = os.path.abspath(burn_subtitles).replace("\\", "/").replace(":", "\\:")
+        # Default style: PingFang SC / Hiragino Sans GB, white text with black border, margin bottom 30px, avoid bottom-right avatar
+        default_style = (
+            "FontName=PingFang SC,FontSize=20,PrimaryColour=&H00FFFFFF,"
+            "OutlineColour=&H00000000,BorderStyle=1,Outline=2.2,Shadow=1,MarginV=30,Alignment=2"
         )
-        v_out_tags.append(f"[{v_tag}]")
-
-        # Audio stream segment (with optional hardware advance compensation)
-        a_tag = f"a{i}"
-        ast = max(0.0, st - audio_advance)
-        aet = max(0.0, et - audio_advance)
-        filter_parts.append(
-            f"[0:a]atrim=start={ast:.3f}:end={aet:.3f},asetpts=PTS-STARTPTS[{a_tag}]"
+        style = subtitle_style or default_style
+        concat_filter = (
+            f"{''.join(concat_inputs)}concat=n={n}:v=1:a=1[v_pre_sub][outa];"
+            f"[v_pre_sub]subtitles='{sub_path}':force_style='{style}'[outv]"
         )
-        a_out_tags.append(f"[{a_tag}]")
+    else:
+        concat_filter = f"{''.join(concat_inputs)}concat=n={n}:v=1:a=1[outv][outa]"
 
-    # Concat all video and audio slices inside one FilterGraph
-    concat_inputs = "".join(f"{v_out_tags[i]}{a_out_tags[i]}" for i in range(len(segments)))
-    filter_parts.append(f"{concat_inputs}concat=n={len(segments)}:v=1:a=1[outv][outa]")
+    filter_parts.append(concat_filter)
     filter_graph = ";".join(filter_parts)
 
     os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
@@ -190,13 +245,20 @@ def cut_video(
         "-map", "[outv]",
         "-map", "[outa]",
         "-c:v", vcodec,
-        "-b:v", bitrate,
+    ]
+
+    if use_hw:
+        cmd.extend(["-b:v", bitrate])
+    else:
+        cmd.extend(["-preset", "fast", "-crf", "18"])
+
+    cmd.extend([
         "-c:a", "aac",
         "-ar", "48000",
         "-b:a", "320k",
         "-movflags", "+faststart",
         output_file,
-    ]
+    ])
 
     print(f"[*] Encoder selected: {vcodec} (Hardware acceleration: {use_hw})")
     print(f"[*] Running FFmpeg FilterGraph engine...")
